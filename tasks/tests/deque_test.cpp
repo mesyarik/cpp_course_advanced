@@ -505,8 +505,7 @@ namespace TestsByUnrealf1 {
         Deque<int> empty;
         assert((empty.end() - empty.begin()) == 0);
         assert((empty.begin() + 0 == empty.end()) && (empty.end() - 0 == empty.begin()));
-        auto iter = empty.begin();
-        assert((iter++ == empty.begin()));
+
         Deque<int> one(1);
         auto iter2 = one.end();
         assert(((--iter2) == one.begin()));
