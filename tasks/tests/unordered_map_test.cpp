@@ -109,13 +109,13 @@ TestGroup create_basic_tests() {
                             // std::endl;
                             m.at("bbb") = 7;
                             // std::cerr << "assignment with at() passed" << std::endl;
-                            test.equals(m.size(), 2);
+                            test.equals(m.size(), static_cast<size_t>(2));
 
                             test.equals(m["aaaaa"], 5);
                             test.equals(m["bbb"], 7);
                             test.equals(m["ccc"], 0);
 
-                            test.equals(m.size(), 3);
+                            test.equals(m.size(), static_cast<size_t>(3));
 
                             // std::cerr << "assertions passed; before try block now" <<
                             // std::endl;
@@ -188,7 +188,7 @@ TestGroup create_basic_tests() {
         m.erase(++it);
 
         test.equals(beg->second, s);
-        test.equals(m.size(), 4);
+        test.equals(m.size(), static_cast<size_t>(4));
 
         UnorderedMap<double, std::string> mm;
         std::vector<std::pair<const double, std::string>> elements = {
@@ -197,13 +197,13 @@ TestGroup create_basic_tests() {
         s = mm.begin()->second;
 
         m.insert(mm.begin(), mm.end());
-        test.equals(mm.size(), 4);
+        test.equals(mm.size(), static_cast<size_t>(4));
         test.equals(mm.begin()->second, s);
 
 
         // Test traverse efficiency
         m.reserve(1'000'000);  // once again, nothing really should happen
-        test.equals(m.size(), 8);
+        test.equals(m.size(), static_cast<size_t>(8));
         // Actions below must be quick (~ 1000 * 8 operations) despite reserving space for 1M
         // elements
         for (int i = 0; i < 10000; ++i) {
@@ -256,7 +256,7 @@ TestGroup create_basic_tests() {
         m.insert(std::move(p));
         // std::cerr << "m.insert(std::move(p)) done" << std::endl;
 
-        test.equals(m.size(), 2);
+        test.equals(m.size(), static_cast<size_t>(2));
 
         // this shouldn't compile
         // m[VerySpecialType(0)] = VerySpecialType(1);
@@ -276,7 +276,7 @@ TestGroup create_basic_tests() {
         // std::cerr << "m.erase(m.begin()) done" << std::endl;
         m.erase(m.begin());
         // std::cerr << "m.erase(m.begin()) done once again" << std::endl;
-        test.equals(m.size(), 0);
+        test.equals(m.size(), static_cast<size_t>(0));
       }),
     make_test<PrettyTest>("custom hash and compare",
                           [&](auto& test) {
@@ -286,7 +286,7 @@ TestGroup create_basic_tests() {
 
                             m.insert({{1, 2}, 0});
                             m.insert({{2, 4}, 1});
-                            test.equals(m.size(), 1);
+                            test.equals(m.size(), static_cast<size_t>(1));
 
                             m[{3, 6}] = 3;
                             test.equals(m.at({4, 8}), 3);
@@ -298,7 +298,7 @@ TestGroup create_basic_tests() {
                             test.equals(mm.at({5, 10}), 3);
 
                             mm.emplace(OneMoreStrangeStruct{3, 9}, 2);
-                            test.equals(mm.size(), 2);
+                            test.equals(mm.size(), static_cast<size_t>(2));
                             mm.reserve(1'000);
                             mm.erase(mm.begin());
                             mm.erase(mm.begin());
@@ -906,7 +906,7 @@ template <typename POCMA, typename AlwaysEqual>
 
 TestGroup create_pocma_allocator_tests() {
   return {
-    "POCMA Allocator tests", make_test<PrettyTest>("POCMA and AlwaysEqual", [&](auto& test) {
+    "POCMA Allocator tests", make_test<PrettyTest>("POCMA and AlwaysEqual", [&](auto&) {
       pocma_map_type<std::true_type, std::true_type> mtt1;
       pocma_map_type<std::true_type, std::true_type> mtt2;
       mtt2 = std::move(mtt1); // just as with std::allocator
