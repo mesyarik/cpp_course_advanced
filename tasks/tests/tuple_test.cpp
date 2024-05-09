@@ -36,6 +36,10 @@ void operator delete(void* ptr) noexcept {
     std::free(ptr);
 }
 
+void operator delete(void* ptr, size_t) noexcept {
+    ++delete_called;
+    std::free(ptr);
+}
 
 struct NeitherDefaultNorCopyConstructible {
     double d;
