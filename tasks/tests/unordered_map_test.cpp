@@ -197,6 +197,11 @@ namespace std {
 
 void TestNoRedundantCopies() {
 // std::cerr << "Test no redundant copies started" << std::endl;
+    {
+      UnorderedMap<NeitherDefaultNorCopyConstructible, int> m;
+      m[VerySpecialType(0)] = 0;
+    }
+
     UnorderedMap<NeitherDefaultNorCopyConstructible, NeitherDefaultNorCopyConstructible> m;
 // std::cerr << "m created" << std::endl;
     m.reserve(10);
