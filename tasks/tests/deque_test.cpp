@@ -533,6 +533,21 @@ namespace TestsByUnrealf1 {
         assert(d.rend() > d.rbegin());
     }
 
+    void testPlusMinusOne() {
+        Deque<int> d(40);
+        Deque<int>::iterator begin = d.begin();
+        Deque<int>::iterator end = d.end();
+        for (int i = 0; i < 100; ++i) {
+            Deque<int>::iterator test = begin + i;
+            Deque<int>::iterator test2 = end - (d.size() - i);
+            assert(test == test2);
+        }
+        Deque<int> dd(1000, 3);
+        for (int i = 2; i < 990; i++) {
+            std::sort(dd.rbegin(), dd.rbegin() + i);
+        }
+    }
+
     void testIteratorsAlgorithms() {
         Deque<int> d(1000, 3);
 
@@ -719,6 +734,7 @@ int main() {
     TestsByUnrealf1::testStaticAssertsIterators();
     TestsByUnrealf1::testIteratorsArithmetic();
     TestsByUnrealf1::testIteratorsComparison();
+    TestsByUnrealf1::testPlusMinusOne();
     TestsByUnrealf1::testIteratorsAlgorithms();
     TestsByUnrealf1::testPushAndPop();
     TestsByUnrealf1::testInsertAndErase();
