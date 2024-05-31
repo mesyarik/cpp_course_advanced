@@ -1,6 +1,7 @@
 #include "unordered_map.h"
 //#include <unordered_map>
 
+#include <tuple> // std::ignore
 #include <vector>
 #include <string>
 #include <iterator>
@@ -14,8 +15,16 @@
 using UnorderedMap = std::unordered_map<Key, Value, Hash, EqualTo, Alloc>;
 */
 
+void TestConstKey() {
+  UnorderedMap<int, int> m;
+  m[1] = 1;
+  assert(std::is_const_v<decltype(m.begin()->first)>);
+}
+
 void SimpleTest() {
     // std::cerr << "starting simple test" << std::endl;
+    TestConstKey();
+
     UnorderedMap<std::string, int> m;
 
     m["aaaaa"] = 5;
@@ -197,6 +206,11 @@ namespace std {
 
 void TestNoRedundantCopies() {
 // std::cerr << "Test no redundant copies started" << std::endl;
+    {
+      UnorderedMap<NeitherDefaultNorCopyConstructible, int> m;
+      m[VerySpecialType(0)] = 0;
+    }
+
     UnorderedMap<NeitherDefaultNorCopyConstructible, NeitherDefaultNorCopyConstructible> m;
 // std::cerr << "m created" << std::endl;
     m.reserve(10);
