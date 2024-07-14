@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <gtest/gtest.h>
 #include <iterator>
@@ -10,12 +11,120 @@
 #include <utility>
 #include <vector>
 
-// #include <deque>
-// template <typename T> using Deque = std::deque<T>;
-
+#ifdef USE_STL_DEQUE
+#include <deque>
+template <typename T> using Deque = std::deque<T>;
+#endif
+#ifndef USE_STL_DEQUE
 #include "deque.h"
+#endif
 
 namespace {
+
+template <typename Container, typename Value>
+concept HasConcstructorsAndAssigns =
+    requires(Container d, size_t size, const Value &value,
+             const Container &cd) {
+      Container();
+      Container(size);
+      Container(size, value);
+      Container(d);
+    } &&
+    std::is_assignable_v<Container, Container> &&
+    std::is_assignable_v<Container, const Container> &&
+    !std::is_assignable_v<const Container, Container>;
+
+template <typename Container, typename Value>
+concept HasSettersAndGetters = requires(Container d, const Container cd) {
+  { d.front() } -> std::same_as<Value &>;
+  { d.back() } -> std::same_as<Value &>;
+  { d[0] } -> std::same_as<Value &>;
+  { d.at(0) } -> std::same_as<Value &>;
+
+  { cd.front() } -> std::same_as<const Value &>;
+  { cd.back() } -> std::same_as<const Value &>;
+  { cd[0] } -> std::same_as<const Value &>;
+  { cd.at(0) } -> std::same_as<const Value &>;
+};
+
+template <typename Container, typename Value>
+concept HasPushPop = requires(Container d, const Value &value) {
+  { d.push_front(value) } -> std::same_as<void>;
+  { d.push_back(value) } -> std::same_as<void>;
+  { d.pop_front() } -> std::same_as<void>;
+  { d.pop_back() } -> std::same_as<void>;
+};
+
+template <typename Container, typename Value>
+concept HasInsertEraseClear = requires(Container d, const Value &value) {
+  { d.insert(d.begin(), value) } -> std::same_as<typename Container::iterator>;
+  { d.erase(d.begin()) } -> std::same_as<typename Container::iterator>;
+  { d.clear() } -> std::same_as<void>;
+};
+
+template <typename Container, typename Value>
+concept HasBeginEnd = requires(Container d, const Container cd) {
+  { d.begin() } -> std::same_as<typename Container::iterator>;
+  { d.end() } -> std::same_as<typename Container::iterator>;
+  { cd.begin() } -> std::same_as<typename Container::const_iterator>;
+  { cd.end() } -> std::same_as<typename Container::const_iterator>;
+
+  { d.cbegin() } -> std::same_as<typename Container::const_iterator>;
+  { d.cend() } -> std::same_as<typename Container::const_iterator>;
+  { cd.cbegin() } -> std::same_as<typename Container::const_iterator>;
+  { cd.cend() } -> std::same_as<typename Container::const_iterator>;
+
+  { d.rbegin() } -> std::same_as<typename Container::reverse_iterator>;
+  { d.rend() } -> std::same_as<typename Container::reverse_iterator>;
+  { cd.rbegin() } -> std::same_as<typename Container::const_reverse_iterator>;
+  { cd.rend() } -> std::same_as<typename Container::const_reverse_iterator>;
+
+  { d.crbegin() } -> std::same_as<typename Container::const_reverse_iterator>;
+  { d.crend() } -> std::same_as<typename Container::const_reverse_iterator>;
+  { cd.crbegin() } -> std::same_as<typename Container::const_reverse_iterator>;
+  { cd.crend() } -> std::same_as<typename Container::const_reverse_iterator>;
+};
+
+template <typename Container, typename Value>
+concept HasMembers = requires(Container d, size_t size) {
+  { d.resize(size) } -> std::same_as<void>;
+  { d.shrink_to_fit() } -> std::same_as<void>;
+  { d.swap(d) } -> std::same_as<void>;
+};
+
+template <typename Container, typename Value>
+concept HasTypes =
+    std::same_as<typename Container::value_type, Value> &&
+    std::same_as<typename Container::size_type, size_t> &&
+    std::same_as<typename Container::difference_type, std::ptrdiff_t> &&
+    std::same_as<typename Container::reference, Value &> &&
+    std::same_as<typename Container::const_reference, const Value &> &&
+    std::same_as<typename Container::pointer, Value *> &&
+    std::same_as<typename Container::const_pointer, const Value *>;
+
+template <typename Container, typename Value>
+concept HasIterators =
+    std::same_as<typename Container::reverse_iterator,
+                 std::reverse_iterator<typename Container::iterator>> &&
+    std::same_as<typename Container::const_reverse_iterator,
+                 std::reverse_iterator<typename Container::const_iterator>> &&
+    std::random_access_iterator<typename Container::iterator> &&
+    std::is_convertible_v<typename Container::iterator,
+                          typename Container::const_iterator> &&
+    !std::is_convertible_v<typename Container::const_iterator,
+                           typename Container::iterator>;
+
+template <typename Container, typename Value>
+concept implies_deque =
+    HasConcstructorsAndAssigns<Container, Value> &&
+    HasSettersAndGetters<Container, Value> && HasPushPop<Container, Value> &&
+    HasInsertEraseClear<Container, Value> && HasBeginEnd<Container, Value> &&
+    HasMembers<Container, Value> &&
+    std::random_access_iterator<typename Container::iterator>;
+
+template <typename T>
+  requires(implies_deque<std::deque<T>, T>)
+using deque = Deque<T>;
 
 // Counts every call of defaul/copy-ctor and dtor
 class Accountant {
@@ -65,6 +174,13 @@ public:
   static void Reset() { counter = 0; }
 };
 
+class NorDefaultNorCopyConstructible {
+public:
+  NorDefaultNorCopyConstructible() = delete;
+  NorDefaultNorCopyConstructible(const NorDefaultNorCopyConstructible &) =
+      delete;
+};
+
 size_t Unique::counter = 0;
 
 class ConstructorsTests : public ::testing::Test {
@@ -84,19 +200,10 @@ protected:
     UniqueDefaultConstructed::Reset();
   }
 };
-
-TEST_F(ConstructorsTests, HasConstructors) {
-  ASSERT_TRUE((std::is_default_constructible_v<Deque<Unique>>));
-  ASSERT_TRUE((std::is_copy_constructible_v<Deque<Unique>>));
-  ASSERT_TRUE((std::is_constructible_v<Deque<Unique>, int>));
-  ASSERT_TRUE((std::is_constructible_v<Deque<Unique>, int, const Unique &>));
-  ASSERT_TRUE((std::is_copy_assignable_v<Deque<Unique>>));
-}
-
 TEST_F(ConstructorsTests, DefaultConstructorWithAccountant) {
 
   {
-    Deque<Accountant> d;
+    deque<Accountant> d;
     ASSERT_EQ(0, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
@@ -110,7 +217,7 @@ TEST_F(ConstructorsTests, DefaultConstructorWithAccountant) {
 
 TEST_F(ConstructorsTests, SizeConstructorWithAccountant) {
   {
-    Deque<Accountant> d(kSmallSize);
+    deque<Accountant> d(kSmallSize);
     ASSERT_EQ(kSmallSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
@@ -123,7 +230,7 @@ TEST_F(ConstructorsTests, SizeConstructorWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kSmallSize, Accountant());
+    deque<Accountant> d(kSmallSize, Accountant());
     ASSERT_EQ(1, Accountant::default_ctor_calls);
     ASSERT_EQ(1, Accountant::dtor_calls);
     ASSERT_EQ(kSmallSize, Accountant::copy_default_ctor_calls);
@@ -136,7 +243,7 @@ TEST_F(ConstructorsTests, SizeConstructorWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kBigSize);
+    deque<Accountant> d(kBigSize);
     ASSERT_EQ(kBigSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
@@ -149,7 +256,7 @@ TEST_F(ConstructorsTests, SizeConstructorWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kBigSize, Accountant());
+    deque<Accountant> d(kBigSize, Accountant());
     ASSERT_EQ(1, Accountant::default_ctor_calls);
     ASSERT_EQ(1, Accountant::dtor_calls);
     ASSERT_EQ(kBigSize, Accountant::copy_default_ctor_calls);
@@ -163,12 +270,12 @@ TEST_F(ConstructorsTests, SizeConstructorWithAccountant) {
 
 TEST_F(ConstructorsTests, CopyConstructorWithAccountant) {
   {
-    Deque<Accountant> d;
+    deque<Accountant> d;
     ASSERT_EQ(0, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
 
-    Deque<Accountant> d2(d);
+    deque<Accountant> d2(d);
     ASSERT_EQ(0, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
@@ -181,12 +288,12 @@ TEST_F(ConstructorsTests, CopyConstructorWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kSmallSize);
+    deque<Accountant> d(kSmallSize);
     ASSERT_EQ(kSmallSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
 
-    Deque<Accountant> d2(d);
+    deque<Accountant> d2(d);
     ASSERT_EQ(kSmallSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(kSmallSize, Accountant::copy_default_ctor_calls);
@@ -199,12 +306,12 @@ TEST_F(ConstructorsTests, CopyConstructorWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kBigSize);
+    deque<Accountant> d(kBigSize);
     ASSERT_EQ(kBigSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
 
-    Deque<Accountant> d2(d);
+    deque<Accountant> d2(d);
     ASSERT_EQ(kBigSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(kBigSize, Accountant::copy_default_ctor_calls);
@@ -219,7 +326,7 @@ TEST_F(ConstructorsTests, CopyConstructorWithAccountant) {
 TEST_F(ConstructorsTests, SizeConstructor) {
   {
     UniqueDefaultConstructed::Reset();
-    Deque<UniqueDefaultConstructed> d(kSmallSize);
+    deque<UniqueDefaultConstructed> d(kSmallSize);
 
     ASSERT_EQ(kSmallSize, UniqueDefaultConstructed::counter);
     for (size_t i = 0; i < kSmallSize; ++i) {
@@ -229,7 +336,7 @@ TEST_F(ConstructorsTests, SizeConstructor) {
 
   {
     UniqueDefaultConstructed::Reset();
-    Deque<UniqueDefaultConstructed> d(kBigSize);
+    deque<UniqueDefaultConstructed> d(kBigSize);
 
     ASSERT_EQ(kBigSize, UniqueDefaultConstructed::counter);
     for (size_t i = 0; i < kBigSize; ++i) {
@@ -239,7 +346,7 @@ TEST_F(ConstructorsTests, SizeConstructor) {
 
   {
     UniqueDefaultConstructed::Reset();
-    Deque<UniqueDefaultConstructed> d(kSmallSize, UniqueDefaultConstructed());
+    deque<UniqueDefaultConstructed> d(kSmallSize, UniqueDefaultConstructed());
 
     ASSERT_EQ(1, UniqueDefaultConstructed::counter);
     for (size_t i = 0; i < kSmallSize; ++i) {
@@ -249,7 +356,7 @@ TEST_F(ConstructorsTests, SizeConstructor) {
 
   {
     UniqueDefaultConstructed::Reset();
-    Deque<UniqueDefaultConstructed> d(kBigSize, UniqueDefaultConstructed());
+    deque<UniqueDefaultConstructed> d(kBigSize, UniqueDefaultConstructed());
 
     ASSERT_EQ(1, UniqueDefaultConstructed::counter);
     for (size_t i = 0; i < kBigSize; ++i) {
@@ -261,8 +368,8 @@ TEST_F(ConstructorsTests, SizeConstructor) {
 TEST_F(ConstructorsTests, CopyConstructor) {
   {
     Unique::Reset();
-    Deque<Unique> d(kSmallSize);
-    Deque<Unique> d2(d);
+    deque<Unique> d(kSmallSize);
+    deque<Unique> d2(d);
 
     for (size_t i = 0; i < kSmallSize; ++i) {
       ASSERT_EQ(i, d[i].number_);
@@ -272,8 +379,8 @@ TEST_F(ConstructorsTests, CopyConstructor) {
 
   {
     Unique::Reset();
-    Deque<Unique> d(kBigSize);
-    Deque<Unique> d2(d);
+    deque<Unique> d(kBigSize);
+    deque<Unique> d2(d);
 
     for (size_t i = 0; i < kBigSize; ++i) {
       ASSERT_EQ(i, d[i].number_);
@@ -284,7 +391,7 @@ TEST_F(ConstructorsTests, CopyConstructor) {
 
 TEST_F(ConstructorsTests, InitializerListConstructor) {
   {
-    Deque<int> d({1, 2, 3});
+    deque<int> d({1, 2, 3});
     ASSERT_EQ(3, d.size());
     ASSERT_EQ(1, d[0]);
     ASSERT_EQ(2, d[1]);
@@ -295,8 +402,8 @@ TEST_F(ConstructorsTests, InitializerListConstructor) {
 TEST_F(ConstructorsTests, CopyAssigment) {
   {
     Unique::Reset();
-    Deque<Unique> d(kSmallSize);
-    Deque<Unique> d2;
+    deque<Unique> d(kSmallSize);
+    deque<Unique> d2;
     d2 = d;
 
     for (size_t i = 0; i < kSmallSize; ++i) {
@@ -307,8 +414,8 @@ TEST_F(ConstructorsTests, CopyAssigment) {
 
   {
     Unique::Reset();
-    Deque<Unique> d(kBigSize);
-    Deque<Unique> d2;
+    deque<Unique> d(kBigSize);
+    deque<Unique> d2;
     d2 = d;
 
     for (size_t i = 0; i < kBigSize; ++i) {
@@ -320,12 +427,12 @@ TEST_F(ConstructorsTests, CopyAssigment) {
 
 TEST_F(ConstructorsTests, CopyAssigmentWithAccountant) {
   {
-    Deque<Accountant> d;
+    deque<Accountant> d;
     ASSERT_EQ(0, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
 
-    Deque<Accountant> d2;
+    deque<Accountant> d2;
     d2 = d;
     ASSERT_EQ(0, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
@@ -339,12 +446,12 @@ TEST_F(ConstructorsTests, CopyAssigmentWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kSmallSize);
+    deque<Accountant> d(kSmallSize);
     ASSERT_EQ(kSmallSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
 
-    Deque<Accountant> d2;
+    deque<Accountant> d2;
     d2 = d;
     ASSERT_EQ(kSmallSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
@@ -358,12 +465,12 @@ TEST_F(ConstructorsTests, CopyAssigmentWithAccountant) {
 
   {
     Accountant::ResetAll();
-    Deque<Accountant> d(kBigSize);
+    deque<Accountant> d(kBigSize);
     ASSERT_EQ(kBigSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
     ASSERT_EQ(0, Accountant::copy_default_ctor_calls);
 
-    Deque<Accountant> d2;
+    deque<Accountant> d2;
     d2 = d;
     ASSERT_EQ(kBigSize, Accountant::default_ctor_calls);
     ASSERT_EQ(0, Accountant::dtor_calls);
@@ -380,8 +487,8 @@ class IndexationTests : public ::testing::Test {
 protected:
   const size_t kSmallSize = 10;
   const size_t kBigSize = 10000000;
-  Deque<UniqueDefaultConstructed> smallDeque_;
-  Deque<UniqueDefaultConstructed> bigDeque_;
+  deque<UniqueDefaultConstructed> smalldeque_;
+  deque<UniqueDefaultConstructed> bigdeque_;
 
   IndexationTests() {}
   ~IndexationTests() {}
@@ -390,8 +497,8 @@ protected:
     Accountant::ResetAll();
     Unique::Reset();
     UniqueDefaultConstructed::Reset();
-    smallDeque_ = Deque<UniqueDefaultConstructed>(kSmallSize);
-    bigDeque_ = Deque<UniqueDefaultConstructed>(kBigSize);
+    smalldeque_ = deque<UniqueDefaultConstructed>(kSmallSize);
+    bigdeque_ = deque<UniqueDefaultConstructed>(kBigSize);
   }
   void TearDown() override {
     Accountant::ResetAll();
@@ -400,94 +507,37 @@ protected:
   }
 };
 
-TEST_F(IndexationTests, IndexationReturnType) {
-  ASSERT_TRUE(
-      (std::is_same_v<Unique &,
-                      decltype(std::declval<Deque<Unique>>().operator[](0))>));
-  ASSERT_TRUE((std::is_same_v<
-               const Unique &,
-               decltype(std::declval<Deque<const Unique>>().operator[](0))>));
-  ASSERT_TRUE((
-      std::is_same_v<Unique &,
-                     decltype(std::declval<Deque<Unique> &>().operator[](0))>));
-  ASSERT_TRUE((std::is_same_v<
-               const Unique &,
-               decltype(std::declval<const Deque<Unique> &>().operator[](0))>));
-
-  ASSERT_TRUE(
-      (std::is_same_v<Unique &,
-                      decltype(std::declval<Deque<Unique>>().front())>));
-  ASSERT_TRUE(
-      (std::is_same_v<const Unique &,
-                      decltype(std::declval<Deque<const Unique>>().front())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Unique &,
-                      decltype(std::declval<Deque<Unique> &>().front())>));
-  ASSERT_TRUE((
-      std::is_same_v<const Unique &,
-                     decltype(std::declval<const Deque<Unique> &>().front())>));
-
-  ASSERT_TRUE((std::is_same_v<Unique &,
-                              decltype(std::declval<Deque<Unique>>().back())>));
-  ASSERT_TRUE(
-      (std::is_same_v<const Unique &,
-                      decltype(std::declval<Deque<const Unique>>().back())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Unique &,
-                      decltype(std::declval<Deque<Unique> &>().back())>));
-  ASSERT_TRUE(
-      (std::is_same_v<const Unique &,
-                      decltype(std::declval<const Deque<Unique> &>().back())>));
-
-  ASSERT_TRUE((
-      std::is_same_v<Unique &, decltype(std::declval<Deque<Unique>>().at(0))>));
-  ASSERT_TRUE(
-      (std::is_same_v<const Unique &,
-                      decltype(std::declval<Deque<const Unique>>().at(0))>));
-  ASSERT_TRUE(
-      (std::is_same_v<Unique &,
-                      decltype(std::declval<Deque<Unique> &>().at(0))>));
-  ASSERT_TRUE(
-      (std::is_same_v<const Unique &,
-                      decltype(std::declval<const Deque<Unique> &>().at(0))>));
-
-  ASSERT_THROW(smallDeque_.at(kSmallSize + 100), std::out_of_range);
-  ASSERT_THROW(bigDeque_.at(kBigSize + 100), std::out_of_range);
-  ASSERT_THROW(smallDeque_.at(-100), std::out_of_range);
-  ASSERT_THROW(bigDeque_.at(-100), std::out_of_range);
-}
-
 TEST_F(IndexationTests, IndexationSetAndGet) {
   for (size_t i = 0; i < kSmallSize; ++i) {
-    ASSERT_EQ(i, smallDeque_[i].number_);
+    ASSERT_EQ(i, smalldeque_[i].number_);
   }
 
-  smallDeque_[2] = UniqueDefaultConstructed();
-  smallDeque_[5] = UniqueDefaultConstructed();
-  ASSERT_EQ(kSmallSize + kBigSize, smallDeque_[2].number_);
-  ASSERT_EQ(kSmallSize + kBigSize + 1, smallDeque_[5].number_);
+  smalldeque_[2] = UniqueDefaultConstructed();
+  smalldeque_[5] = UniqueDefaultConstructed();
+  ASSERT_EQ(kSmallSize + kBigSize, smalldeque_[2].number_);
+  ASSERT_EQ(kSmallSize + kBigSize + 1, smalldeque_[5].number_);
   for (size_t i = 0; i < kSmallSize; ++i) {
     if (i != 2 && i != 5) {
-      ASSERT_EQ(i, smallDeque_[i].number_);
+      ASSERT_EQ(i, smalldeque_[i].number_);
     }
   }
 
   for (size_t i = 0; i < kBigSize; ++i) {
-    ASSERT_EQ(i + kSmallSize, bigDeque_[i].number_);
+    ASSERT_EQ(i + kSmallSize, bigdeque_[i].number_);
   }
 
   const int indices[] = {1, 127, 5556, 123123};
   for (size_t i = 0; i < sizeof(indices) / sizeof(int); ++i) {
-    bigDeque_[indices[i]] = UniqueDefaultConstructed();
+    bigdeque_[indices[i]] = UniqueDefaultConstructed();
   }
 
   for (size_t i = 0; i < sizeof(indices) / sizeof(int); ++i) {
-    ASSERT_EQ(kSmallSize + kBigSize + 2 + i, bigDeque_[indices[i]].number_);
+    ASSERT_EQ(kSmallSize + kBigSize + 2 + i, bigdeque_[indices[i]].number_);
   }
   for (size_t i = 0; i < kBigSize; ++i) {
     if (std::find(indices, indices + sizeof(indices) / sizeof(int), i) ==
         indices + sizeof(indices) / sizeof(int)) {
-      ASSERT_EQ(kSmallSize + i, bigDeque_[i].number_);
+      ASSERT_EQ(kSmallSize + i, bigdeque_[i].number_);
     }
   }
 }
@@ -496,8 +546,8 @@ class PushPopTests : public ::testing::Test {
 protected:
   const size_t kSmallSize = 10;
   const size_t kBigSize = 10000000;
-  Deque<UniqueDefaultConstructed> smallDeque_;
-  Deque<UniqueDefaultConstructed> bigDeque_;
+  deque<UniqueDefaultConstructed> smalldeque_;
+  deque<UniqueDefaultConstructed> bigdeque_;
 
   PushPopTests() {}
   virtual ~PushPopTests() {}
@@ -505,8 +555,8 @@ protected:
     Accountant::ResetAll();
     Unique::Reset();
     UniqueDefaultConstructed::Reset();
-    smallDeque_ = Deque<UniqueDefaultConstructed>(kSmallSize);
-    bigDeque_ = Deque<UniqueDefaultConstructed>(kBigSize);
+    smalldeque_ = deque<UniqueDefaultConstructed>(kSmallSize);
+    bigdeque_ = deque<UniqueDefaultConstructed>(kBigSize);
   }
   virtual void TearDown() {
     Accountant::ResetAll();
@@ -516,73 +566,73 @@ protected:
 };
 
 TEST_F(PushPopTests, PushBackPopBack) {
-  ASSERT_EQ(kSmallSize, smallDeque_.size());
-  smallDeque_.push_back(UniqueDefaultConstructed());
-  ASSERT_EQ(kSmallSize + 1, smallDeque_.size());
-  UniqueDefaultConstructed last_element = smallDeque_.back();
-  smallDeque_.pop_back();
-  ASSERT_EQ(kSmallSize, smallDeque_.size());
+  ASSERT_EQ(kSmallSize, smalldeque_.size());
+  smalldeque_.push_back(UniqueDefaultConstructed());
+  ASSERT_EQ(kSmallSize + 1, smalldeque_.size());
+  UniqueDefaultConstructed last_element = smalldeque_.back();
+  smalldeque_.pop_back();
+  ASSERT_EQ(kSmallSize, smalldeque_.size());
   ASSERT_EQ(kSmallSize + kBigSize, last_element.number_);
 
-  for (size_t i = 0; i < smallDeque_.size(); ++i) {
-    ASSERT_EQ(i, smallDeque_[i].number_);
+  for (size_t i = 0; i < smalldeque_.size(); ++i) {
+    ASSERT_EQ(i, smalldeque_[i].number_);
   }
 
   //---------------------------------------------------
 
-  bigDeque_.push_back(UniqueDefaultConstructed());
-  ASSERT_EQ(kBigSize + 1, bigDeque_.size());
+  bigdeque_.push_back(UniqueDefaultConstructed());
+  ASSERT_EQ(kBigSize + 1, bigdeque_.size());
 
-  UniqueDefaultConstructed last_big_element = bigDeque_.back();
-  bigDeque_.pop_back();
-  ASSERT_EQ(kBigSize, bigDeque_.size());
+  UniqueDefaultConstructed last_big_element = bigdeque_.back();
+  bigdeque_.pop_back();
+  ASSERT_EQ(kBigSize, bigdeque_.size());
   ASSERT_EQ(kSmallSize + kBigSize + 1, last_big_element.number_);
 
-  for (size_t i = 0; i < bigDeque_.size(); ++i) {
-    ASSERT_EQ(i + kSmallSize, bigDeque_[i].number_);
+  for (size_t i = 0; i < bigdeque_.size(); ++i) {
+    ASSERT_EQ(i + kSmallSize, bigdeque_[i].number_);
   }
 }
 
 TEST_F(PushPopTests, PushFrontPopFront) {
-  smallDeque_.push_front(UniqueDefaultConstructed());
+  smalldeque_.push_front(UniqueDefaultConstructed());
 
-  ASSERT_EQ(kSmallSize + 1, smallDeque_.size());
+  ASSERT_EQ(kSmallSize + 1, smalldeque_.size());
 
-  UniqueDefaultConstructed first_element = smallDeque_.front();
-  smallDeque_.pop_front();
+  UniqueDefaultConstructed first_element = smalldeque_.front();
+  smalldeque_.pop_front();
 
-  ASSERT_EQ(kSmallSize, smallDeque_.size());
+  ASSERT_EQ(kSmallSize, smalldeque_.size());
   ASSERT_EQ(kSmallSize + kBigSize, first_element.number_);
 
-  for (size_t i = 0; i < smallDeque_.size(); ++i) {
-    ASSERT_EQ(i, smallDeque_[i].number_);
+  for (size_t i = 0; i < smalldeque_.size(); ++i) {
+    ASSERT_EQ(i, smalldeque_[i].number_);
   }
 
   //------------------------------------------------------------------------------
 
-  bigDeque_.push_front(UniqueDefaultConstructed());
-  ASSERT_EQ(kBigSize + 1, bigDeque_.size());
-  UniqueDefaultConstructed first_big_element = bigDeque_.front();
-  bigDeque_.pop_front();
-  ASSERT_EQ(kBigSize, bigDeque_.size());
+  bigdeque_.push_front(UniqueDefaultConstructed());
+  ASSERT_EQ(kBigSize + 1, bigdeque_.size());
+  UniqueDefaultConstructed first_big_element = bigdeque_.front();
+  bigdeque_.pop_front();
+  ASSERT_EQ(kBigSize, bigdeque_.size());
   ASSERT_EQ(kSmallSize + kBigSize + 1, first_big_element.number_);
 
-  for (size_t i = 0; i < bigDeque_.size(); ++i) {
-    ASSERT_EQ(i + kSmallSize, bigDeque_[i].number_);
+  for (size_t i = 0; i < bigdeque_.size(); ++i) {
+    ASSERT_EQ(i + kSmallSize, bigdeque_[i].number_);
   }
 }
 
 TEST_F(PushPopTests, ManyPushAndPops) {
   for (size_t i = 0; i < 100000; ++i) {
-    bigDeque_.push_back(UniqueDefaultConstructed());
-    bigDeque_.push_front(UniqueDefaultConstructed());
-    bigDeque_.pop_back();
-    bigDeque_.pop_front();
+    bigdeque_.push_back(UniqueDefaultConstructed());
+    bigdeque_.push_front(UniqueDefaultConstructed());
+    bigdeque_.pop_back();
+    bigdeque_.pop_front();
   }
 
-  ASSERT_EQ(kBigSize, bigDeque_.size());
+  ASSERT_EQ(kBigSize, bigdeque_.size());
 
-  Deque<int> d;
+  deque<int> d;
   for (int i = 0; i < 1000; ++i) {
     for (int j = 0; j < 1000; ++j) {
 
@@ -616,7 +666,7 @@ class IteratorsTests : public ::testing::Test {
 protected:
   const size_t kSmallSize = 10;
   const size_t kBigSize = 10000000;
-  Deque<UniqueDefaultConstructed> smallDeque_;
+  deque<UniqueDefaultConstructed> smalldeque_;
 
   IteratorsTests() {}
   virtual ~IteratorsTests() {}
@@ -624,7 +674,7 @@ protected:
     Accountant::ResetAll();
     Unique::Reset();
     UniqueDefaultConstructed::Reset();
-    smallDeque_ = Deque<UniqueDefaultConstructed>(kSmallSize);
+    smalldeque_ = deque<UniqueDefaultConstructed>(kSmallSize);
   }
   virtual void TearDown() {
     Accountant::ResetAll();
@@ -632,157 +682,6 @@ protected:
     UniqueDefaultConstructed::Reset();
   }
 };
-
-TEST_F(IteratorsTests, IteratorTypes) {
-  ASSERT_TRUE((std::is_same_v<std::reverse_iterator<Deque<Unique>::iterator>,
-                              Deque<Unique>::reverse_iterator>));
-  ASSERT_TRUE(
-      (std::is_same_v<std::reverse_iterator<Deque<Unique>::const_iterator>,
-                      Deque<Unique>::const_reverse_iterator>));
-
-  ASSERT_TRUE((
-      std::is_same_v<Unique &, decltype(std::declval<Deque<Unique>::iterator>().
-                                        operator*())>));
-  ASSERT_TRUE(
-      (std::is_same_v<const Unique &,
-                      decltype(std::declval<Deque<Unique>::const_iterator>().
-                               operator*())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Unique &,
-                      decltype(std::declval<Deque<Unique>::reverse_iterator>().
-                               operator*())>));
-  ASSERT_TRUE((std::is_same_v<
-               const Unique &,
-               decltype(std::declval<Deque<Unique>::const_reverse_iterator>().
-                        operator*())>));
-
-  ASSERT_TRUE(
-      (std::is_same_v<
-          Unique *,
-          decltype(std::declval<Deque<Unique>::iterator>().operator->())>));
-  ASSERT_TRUE((std::is_same_v<
-               const Unique *,
-               decltype(std::declval<Deque<Unique>::const_iterator>().
-                        operator->())>));
-  ASSERT_TRUE(
-      (std::is_same_v<
-          Unique *,
-          decltype(std::declval<Deque<Unique>::reverse_iterator>().
-                   operator->())>));
-  ASSERT_TRUE((std::is_same_v<
-               const Unique *,
-               decltype(std::declval<Deque<Unique>::const_reverse_iterator>()
-                            .
-                            operator->())>));
-
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::iterator,
-                      decltype(std::declval<Deque<Unique>>().begin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<const Deque<Unique>>().begin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::iterator,
-                      decltype(std::declval<Deque<Unique> &>().begin())>));
-  ASSERT_TRUE((
-      std::is_same_v<Deque<Unique>::const_iterator,
-                     decltype(std::declval<const Deque<Unique> &>().begin())>));
-
-  ASSERT_TRUE((std::is_same_v<Deque<Unique>::iterator,
-                              decltype(std::declval<Deque<Unique>>().end())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<const Deque<Unique>>().end())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::iterator,
-                      decltype(std::declval<Deque<Unique> &>().end())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<const Deque<Unique> &>().end())>));
-
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<Deque<Unique>>().cbegin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<const Deque<Unique>>().cbegin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<Deque<Unique> &>().cbegin())>));
-  ASSERT_TRUE((std::is_same_v<
-               Deque<Unique>::const_iterator,
-               decltype(std::declval<const Deque<Unique> &>().cbegin())>));
-
-  ASSERT_TRUE((std::is_same_v<Deque<Unique>::const_iterator,
-                              decltype(std::declval<Deque<Unique>>().cend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<const Deque<Unique>>().cend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<Deque<Unique> &>().cend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_iterator,
-                      decltype(std::declval<const Deque<Unique> &>().cend())>));
-
-  // reverse
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::reverse_iterator,
-                      decltype(std::declval<Deque<Unique>>().rbegin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<const Deque<Unique>>().rbegin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::reverse_iterator,
-                      decltype(std::declval<Deque<Unique> &>().rbegin())>));
-  ASSERT_TRUE((std::is_same_v<
-               Deque<Unique>::const_reverse_iterator,
-               decltype(std::declval<const Deque<Unique> &>().rbegin())>));
-
-  ASSERT_TRUE((std::is_same_v<Deque<Unique>::reverse_iterator,
-                              decltype(std::declval<Deque<Unique>>().rend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<const Deque<Unique>>().rend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::reverse_iterator,
-                      decltype(std::declval<Deque<Unique> &>().rend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<const Deque<Unique> &>().rend())>));
-
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<Deque<Unique>>().crbegin())>));
-  ASSERT_TRUE((
-      std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                     decltype(std::declval<const Deque<Unique>>().crbegin())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<Deque<Unique> &>().crbegin())>));
-  ASSERT_TRUE((std::is_same_v<
-               Deque<Unique>::const_reverse_iterator,
-               decltype(std::declval<const Deque<Unique> &>().crbegin())>));
-
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<Deque<Unique>>().crend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<const Deque<Unique>>().crend())>));
-  ASSERT_TRUE(
-      (std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                      decltype(std::declval<Deque<Unique> &>().crend())>));
-  ASSERT_TRUE((
-      std::is_same_v<Deque<Unique>::const_reverse_iterator,
-                     decltype(std::declval<const Deque<Unique> &>().crend())>));
-
-  ASSERT_TRUE((std::is_convertible_v<Deque<Unique>::iterator,
-                                     Deque<Unique>::const_iterator>));
-  ASSERT_TRUE((!std::is_convertible_v<Deque<Unique>::const_iterator,
-                                      Deque<Unique>::iterator>));
-}
-
 template <typename Iter, typename T> void testIteratorArithmeticTypes() {
   using traits = std::iterator_traits<Iter>;
 
@@ -817,58 +716,58 @@ template <typename Iter, typename T> void testIteratorArithmeticTypes() {
 }
 
 TEST_F(IteratorsTests, IteratorArithmeticsTypes) {
-  testIteratorArithmeticTypes<Deque<Unique>::iterator, Unique>();
-  testIteratorArithmeticTypes<Deque<Unique>::const_iterator, const Unique>();
-  testIteratorArithmeticTypes<Deque<Unique>::reverse_iterator, Unique>();
-  testIteratorArithmeticTypes<Deque<Unique>::const_reverse_iterator,
+  testIteratorArithmeticTypes<deque<Unique>::iterator, Unique>();
+  testIteratorArithmeticTypes<deque<Unique>::const_iterator, const Unique>();
+  testIteratorArithmeticTypes<deque<Unique>::reverse_iterator, Unique>();
+  testIteratorArithmeticTypes<deque<Unique>::const_reverse_iterator,
                               const Unique>();
 }
 
 TEST_F(IteratorsTests, IteratorArithmetics) {
 
-  ASSERT_EQ(smallDeque_.begin() + smallDeque_.size(), smallDeque_.end());
-  ASSERT_EQ(smallDeque_.end() - smallDeque_.begin(), smallDeque_.size());
-  ASSERT_EQ(smallDeque_.end() - smallDeque_.size(), smallDeque_.begin());
+  ASSERT_EQ(smalldeque_.begin() + smalldeque_.size(), smalldeque_.end());
+  ASSERT_EQ(smalldeque_.end() - smalldeque_.begin(), smalldeque_.size());
+  ASSERT_EQ(smalldeque_.end() - smalldeque_.size(), smalldeque_.begin());
 
   {
-    auto iter = smallDeque_.begin();
-    for (size_t i = 0; i < smallDeque_.size(); ++i) {
-      ASSERT_EQ(iter, smallDeque_.begin() + i);
+    auto iter = smalldeque_.begin();
+    for (size_t i = 0; i < smalldeque_.size(); ++i) {
+      ASSERT_EQ(iter, smalldeque_.begin() + i);
       ++iter;
     }
-    ASSERT_EQ(iter, smallDeque_.end());
+    ASSERT_EQ(iter, smalldeque_.end());
   }
 
   {
-    auto iter = smallDeque_.begin();
-    for (size_t i = 0; i < smallDeque_.size(); ++i) {
-      ASSERT_EQ(iter->number_, smallDeque_[i].number_);
+    auto iter = smalldeque_.begin();
+    for (size_t i = 0; i < smalldeque_.size(); ++i) {
+      ASSERT_EQ(iter->number_, smalldeque_[i].number_);
       ++iter;
     }
   }
 
   {
-    auto iter = smallDeque_.end() - 1;
-    for (size_t i = 0; i < smallDeque_.size(); ++i) {
-      ASSERT_EQ(iter->number_, smallDeque_[smallDeque_.size() - 1 - i].number_);
-      if (i < smallDeque_.size() - 1) {
+    auto iter = smalldeque_.end() - 1;
+    for (size_t i = 0; i < smalldeque_.size(); ++i) {
+      ASSERT_EQ(iter->number_, smalldeque_[smalldeque_.size() - 1 - i].number_);
+      if (i < smalldeque_.size() - 1) {
         --iter;
       }
     }
   }
 
   {
-    auto iter_incr = smallDeque_.begin();
-    auto iter_plus = smallDeque_.begin();
-    for (; iter_incr != smallDeque_.end(); ++iter_incr, iter_plus += 1) {
+    auto iter_incr = smalldeque_.begin();
+    auto iter_plus = smalldeque_.begin();
+    for (; iter_incr != smalldeque_.end(); ++iter_incr, iter_plus += 1) {
       ASSERT_EQ(iter_incr, iter_plus);
     }
   }
 
   {
-    for (size_t step = 1; step < smallDeque_.size(); ++step) {
-      auto iter = smallDeque_.begin();
-      for (size_t i = 0; i < smallDeque_.size(); i += step) {
+    for (size_t step = 1; step < smalldeque_.size(); ++step) {
+      auto iter = smalldeque_.begin();
+      for (size_t i = 0; i < smalldeque_.size(); i += step) {
         ASSERT_EQ(i, (iter + i)->number_);
       }
     }
@@ -877,21 +776,21 @@ TEST_F(IteratorsTests, IteratorArithmetics) {
 
 TEST_F(IteratorsTests, IteratorComparison) {
   {
-    for (size_t i = 0; i < smallDeque_.size(); ++i) {
-      ASSERT_GT(smallDeque_.end(), smallDeque_.begin() + i);
-      ASSERT_GT(smallDeque_.cend(), smallDeque_.cbegin() + i);
-      ASSERT_GT(smallDeque_.rend(), smallDeque_.rbegin() + i);
-      ASSERT_GT(smallDeque_.crend(), smallDeque_.crbegin() + i);
+    for (size_t i = 0; i < smalldeque_.size(); ++i) {
+      ASSERT_GT(smalldeque_.end(), smalldeque_.begin() + i);
+      ASSERT_GT(smalldeque_.cend(), smalldeque_.cbegin() + i);
+      ASSERT_GT(smalldeque_.rend(), smalldeque_.rbegin() + i);
+      ASSERT_GT(smalldeque_.crend(), smalldeque_.crbegin() + i);
     }
 
-    ASSERT_EQ(smallDeque_.end(), smallDeque_.begin() + smallDeque_.size());
-    ASSERT_EQ(smallDeque_.cend(), smallDeque_.cbegin() + smallDeque_.size());
-    ASSERT_EQ(smallDeque_.rend(), smallDeque_.rbegin() + smallDeque_.size());
-    ASSERT_EQ(smallDeque_.crend(), smallDeque_.crbegin() + smallDeque_.size());
+    ASSERT_EQ(smalldeque_.end(), smalldeque_.begin() + smalldeque_.size());
+    ASSERT_EQ(smalldeque_.cend(), smalldeque_.cbegin() + smalldeque_.size());
+    ASSERT_EQ(smalldeque_.rend(), smalldeque_.rbegin() + smalldeque_.size());
+    ASSERT_EQ(smalldeque_.crend(), smalldeque_.crbegin() + smalldeque_.size());
   }
 
   {
-    Deque<Unique> empty;
+    deque<Unique> empty;
     ASSERT_EQ(empty.end() - empty.begin(), 0);
     ASSERT_EQ(empty.begin() + 0, empty.end());
     ASSERT_EQ(empty.end() - 0, empty.begin());
@@ -911,7 +810,7 @@ TEST_F(IteratorsTests, IteratorComparison) {
 }
 
 TEST_F(IteratorsTests, IteratorsAlgorithms) {
-  Deque<int> d(1000);
+  deque<int> d(1000);
   std::iota(d.begin(), d.end(), 13);
   std::mt19937 g(31415);
   std::shuffle(d.begin(), d.end(), g);
@@ -923,73 +822,73 @@ TEST_F(IteratorsTests, IteratorsAlgorithms) {
 
 TEST_F(IteratorsTests, IteratorsInvalidationAfterPop) {
   {
-    auto iter = smallDeque_.begin();
-    for (size_t i = 0; i < smallDeque_.size(); ++i) {
-      ASSERT_EQ(iter->number_, smallDeque_[i].number_);
+    auto iter = smalldeque_.begin();
+    for (size_t i = 0; i < smalldeque_.size(); ++i) {
+      ASSERT_EQ(iter->number_, smalldeque_[i].number_);
       ++iter;
     }
   }
 
   {
-    std::vector<Deque<UniqueDefaultConstructed>::iterator> iterators;
-    for (size_t i = 0; i <= smallDeque_.size(); ++i) {
-      iterators.push_back(smallDeque_.begin() + i);
+    std::vector<deque<UniqueDefaultConstructed>::iterator> iterators;
+    for (size_t i = 0; i <= smalldeque_.size(); ++i) {
+      iterators.push_back(smalldeque_.begin() + i);
     }
 
-    size_t start = 0, end = smallDeque_.size();
+    size_t start = 0, end = smalldeque_.size();
     while (start < end) {
-      smallDeque_.pop_front();
+      smalldeque_.pop_front();
       ++start;
       for (size_t i = start; i < end; ++i) {
         ASSERT_EQ(iterators[i]->number_, i);
-        ASSERT_EQ(iterators[i], smallDeque_.begin() + i - start);
-        ASSERT_EQ(&*iterators[i], &smallDeque_[i - start]);
+        ASSERT_EQ(iterators[i], smalldeque_.begin() + i - start);
+        ASSERT_EQ(&*iterators[i], &smalldeque_[i - start]);
       }
-      ASSERT_EQ(iterators[end], smallDeque_.end());
+      ASSERT_EQ(iterators[end], smalldeque_.end());
     }
   }
 
   {
-    std::vector<Deque<UniqueDefaultConstructed>::iterator> iterators;
-    for (size_t i = 0; i <= smallDeque_.size(); ++i) {
-      iterators.push_back(smallDeque_.begin() + i);
+    std::vector<deque<UniqueDefaultConstructed>::iterator> iterators;
+    for (size_t i = 0; i <= smalldeque_.size(); ++i) {
+      iterators.push_back(smalldeque_.begin() + i);
     }
 
-    size_t start = 0, end = smallDeque_.size();
+    size_t start = 0, end = smalldeque_.size();
     while (start < end) {
-      smallDeque_.pop_back();
+      smalldeque_.pop_back();
       --end;
       for (size_t i = start; i < end; ++i) {
         ASSERT_EQ(iterators[i]->number_, i);
-        ASSERT_EQ(iterators[i], smallDeque_.begin() + i - start);
-        ASSERT_EQ(&*iterators[i], &smallDeque_[i - start]);
+        ASSERT_EQ(iterators[i], smalldeque_.begin() + i - start);
+        ASSERT_EQ(&*iterators[i], &smalldeque_[i - start]);
       }
-      ASSERT_EQ(iterators[end], smallDeque_.end());
+      ASSERT_EQ(iterators[end], smalldeque_.end());
     }
   }
 
   {
-    std::vector<Deque<UniqueDefaultConstructed>::iterator> iterators;
-    for (size_t i = 0; i <= smallDeque_.size(); ++i) {
-      iterators.push_back(smallDeque_.begin() + i);
+    std::vector<deque<UniqueDefaultConstructed>::iterator> iterators;
+    for (size_t i = 0; i <= smalldeque_.size(); ++i) {
+      iterators.push_back(smalldeque_.begin() + i);
     }
 
-    size_t start = 0, end = smallDeque_.size();
+    size_t start = 0, end = smalldeque_.size();
     for (size_t round = 0; start < end; ++round) {
       if (round % 2 == 0) {
-        smallDeque_.pop_back();
+        smalldeque_.pop_back();
         --end;
       } else {
-        smallDeque_.pop_front();
+        smalldeque_.pop_front();
         ++start;
       }
 
       for (size_t i = start; i < end; ++i) {
         ASSERT_EQ(iterators[i]->number_, i);
-        ASSERT_EQ(iterators[i], smallDeque_.begin() + i - start);
-        ASSERT_EQ(&*iterators[i], &smallDeque_[i - start]);
+        ASSERT_EQ(iterators[i], smalldeque_.begin() + i - start);
+        ASSERT_EQ(&*iterators[i], &smalldeque_[i - start]);
       }
-      ASSERT_EQ(iterators[end], smallDeque_.end());
+      ASSERT_EQ(iterators[end], smalldeque_.end());
     }
   }
 }
@@ -997,24 +896,24 @@ TEST_F(IteratorsTests, IteratorsInvalidationAfterPop) {
 TEST_F(IteratorsTests, PointerAndReferenceInvalidationAfterPush) {
   {
     std::vector<UniqueDefaultConstructed *> pointers;
-    for (size_t i = 0; i < smallDeque_.size(); ++i) {
-      pointers.push_back(&smallDeque_[i]);
+    for (size_t i = 0; i < smalldeque_.size(); ++i) {
+      pointers.push_back(&smalldeque_[i]);
     }
 
-    size_t start = 0, end = smallDeque_.size();
+    size_t start = 0, end = smalldeque_.size();
     for (size_t round = 0; round < 100; ++round) {
       if (round % 2 == 0) {
-        smallDeque_.push_back(UniqueDefaultConstructed());
+        smalldeque_.push_back(UniqueDefaultConstructed());
       } else {
-        smallDeque_.push_front(UniqueDefaultConstructed());
+        smalldeque_.push_front(UniqueDefaultConstructed());
         ++start;
         ++end;
       }
 
       for (size_t i = start; i < end; ++i) {
         ASSERT_EQ(pointers[i - start]->number_, i - start);
-        ASSERT_EQ(pointers[i - start], &smallDeque_[i]);
-        ASSERT_EQ(pointers[i - start], &*(smallDeque_.begin() + i));
+        ASSERT_EQ(pointers[i - start], &smalldeque_[i]);
+        ASSERT_EQ(pointers[i - start], &*(smalldeque_.begin() + i));
       }
     }
   }
@@ -1024,8 +923,8 @@ class InsertEraseTests : public ::testing::Test {
 protected:
   const size_t kSmallSize = 10;
   const size_t kBigSize = 10000000;
-  Deque<UniqueDefaultConstructed> smallDeque_;
-  Deque<UniqueDefaultConstructed> bigDeque_;
+  deque<UniqueDefaultConstructed> smalldeque_;
+  deque<UniqueDefaultConstructed> bigdeque_;
 
   InsertEraseTests() {}
   virtual ~InsertEraseTests() {}
@@ -1033,8 +932,8 @@ protected:
     Accountant::ResetAll();
     Unique::Reset();
     UniqueDefaultConstructed::Reset();
-    smallDeque_ = Deque<UniqueDefaultConstructed>(kSmallSize);
-    bigDeque_ = Deque<UniqueDefaultConstructed>(kBigSize);
+    smalldeque_ = deque<UniqueDefaultConstructed>(kSmallSize);
+    bigdeque_ = deque<UniqueDefaultConstructed>(kBigSize);
   }
   virtual void TearDown() {
     Accountant::ResetAll();
@@ -1045,52 +944,52 @@ protected:
 
 TEST_F(InsertEraseTests, InsertErase) {
   {
-    smallDeque_.insert(smallDeque_.begin() + kSmallSize / 2,
+    smalldeque_.insert(smalldeque_.begin() + kSmallSize / 2,
                        UniqueDefaultConstructed());
-    ASSERT_EQ(kSmallSize + 1, smallDeque_.size());
+    ASSERT_EQ(kSmallSize + 1, smalldeque_.size());
     for (size_t i = 0; i < kSmallSize / 2; ++i) {
-      ASSERT_EQ(i, smallDeque_[i].number_);
+      ASSERT_EQ(i, smalldeque_[i].number_);
     }
-    ASSERT_EQ(kSmallSize + kBigSize, smallDeque_[kSmallSize / 2].number_);
+    ASSERT_EQ(kSmallSize + kBigSize, smalldeque_[kSmallSize / 2].number_);
     for (size_t i = kSmallSize / 2; i < kSmallSize; ++i) {
-      ASSERT_EQ(i, smallDeque_[i + 1].number_);
+      ASSERT_EQ(i, smalldeque_[i + 1].number_);
     }
   }
 
   {
-    bigDeque_.insert(bigDeque_.begin() + kBigSize / 2,
+    bigdeque_.insert(bigdeque_.begin() + kBigSize / 2,
                      UniqueDefaultConstructed());
-    ASSERT_EQ(kBigSize + 1, bigDeque_.size());
+    ASSERT_EQ(kBigSize + 1, bigdeque_.size());
     for (size_t i = 0; i < kBigSize / 2; ++i) {
-      ASSERT_EQ(i + kSmallSize, bigDeque_[i].number_);
+      ASSERT_EQ(i + kSmallSize, bigdeque_[i].number_);
     }
-    ASSERT_EQ(kSmallSize + kBigSize + 1, bigDeque_[kBigSize / 2].number_);
+    ASSERT_EQ(kSmallSize + kBigSize + 1, bigdeque_[kBigSize / 2].number_);
     for (size_t i = kBigSize / 2; i < kBigSize; ++i) {
-      ASSERT_EQ(i + kSmallSize, bigDeque_[i + 1].number_);
+      ASSERT_EQ(i + kSmallSize, bigdeque_[i + 1].number_);
     }
   }
 
   {
-    smallDeque_.erase(smallDeque_.begin() + kSmallSize / 2 - 1);
-    ASSERT_EQ(kSmallSize, smallDeque_.size());
+    smalldeque_.erase(smalldeque_.begin() + kSmallSize / 2 - 1);
+    ASSERT_EQ(kSmallSize, smalldeque_.size());
     for (size_t i = 0; i < kSmallSize / 2 - 1; ++i) {
-      ASSERT_EQ(i, smallDeque_[i].number_);
+      ASSERT_EQ(i, smalldeque_[i].number_);
     }
-    ASSERT_EQ(kSmallSize + kBigSize, smallDeque_[kSmallSize / 2 - 1].number_);
+    ASSERT_EQ(kSmallSize + kBigSize, smalldeque_[kSmallSize / 2 - 1].number_);
     for (size_t i = kSmallSize / 2; i < kSmallSize; ++i) {
-      ASSERT_EQ(i, smallDeque_[i].number_);
+      ASSERT_EQ(i, smalldeque_[i].number_);
     }
   }
 
   {
-    bigDeque_.erase(bigDeque_.begin() + kBigSize / 2 - 1);
-    ASSERT_EQ(kBigSize, bigDeque_.size());
+    bigdeque_.erase(bigdeque_.begin() + kBigSize / 2 - 1);
+    ASSERT_EQ(kBigSize, bigdeque_.size());
     for (size_t i = 0; i < kBigSize / 2 - 1; ++i) {
-      ASSERT_EQ(i + kSmallSize, bigDeque_[i].number_);
+      ASSERT_EQ(i + kSmallSize, bigdeque_[i].number_);
     }
-    ASSERT_EQ(kSmallSize + kBigSize + 1, bigDeque_[kBigSize / 2 - 1].number_);
+    ASSERT_EQ(kSmallSize + kBigSize + 1, bigdeque_[kBigSize / 2 - 1].number_);
     for (size_t i = kBigSize / 2; i < kBigSize; ++i) {
-      ASSERT_EQ(i + kSmallSize, bigDeque_[i].number_);
+      ASSERT_EQ(i + kSmallSize, bigdeque_[i].number_);
     }
   }
 }
@@ -1169,20 +1068,20 @@ protected:
 };
 
 TEST_F(ExceptionTests, ThrowsExceptions) {
-  ASSERT_THROW([]() { Deque<Counted<17>> d(100); }(), CountedException);
+  ASSERT_THROW([]() { deque<Counted<17>> d(100); }(), CountedException);
   try {
-    Deque<Counted<17>> d(100);
+    deque<Counted<17>> d(100);
   } catch (CountedException &) {
     ASSERT_EQ(Counted<17>::counter, 0);
   }
 
-  ASSERT_THROW([]() { Deque<Explosive> d(100); }(), int);
-  ASSERT_NO_THROW([]() { Deque<Explosive> d; }());
+  ASSERT_THROW([]() { deque<Explosive> d(100); }(), int);
+  ASSERT_NO_THROW([]() { deque<Explosive> d; }());
   ASSERT_FALSE(Explosive::exploded);
 
   ASSERT_THROW(
       []() {
-        Deque<Explosive> d;
+        deque<Explosive> d;
         auto safe = Explosive(Explosive::Safeguard{});
         d.push_back(safe);
       }(),
@@ -1193,7 +1092,7 @@ TEST_F(ExceptionTests, ThrowsExceptions) {
 TEST_F(ExceptionTests, StrongGuarantee) {
   const size_t size = 20'000;
   const size_t initial_data = 100;
-  Deque<Fragile> d(size, Fragile(size, initial_data));
+  deque<Fragile> d(size, Fragile(size, initial_data));
 
   auto is_intact = [&] {
     return d.size() == size &&
