@@ -6,11 +6,11 @@
 #include <algorithm>
 #include <type_traits>
 
-#include "tuple.h"
+//#include "tuple.h"
 
-//#include <tuple>
+#include <tuple>
 
-/*template <typename... Types>
+template <typename... Types>
 using Tuple = std::tuple<Types...>;
 
 template <typename... Types>
@@ -21,7 +21,7 @@ constexpr auto makeTuple(Types&&... args) {
 template <typename... Tuples>
 constexpr auto tupleCat(Tuples&&... args) {
     return std::tuple_cat(std::forward<Tuples>(args)...);
-}*/
+}
 
 int new_called = 0;
 int delete_called = 0;
@@ -391,6 +391,9 @@ void test_tuple() {
 
         get<1>(t) = 7;
         assert(x == 7);
+
+        Tuple<int&, NeitherDefaultNorCopyConstructible> tt(x, 3.14);
+        auto t2 = std::move(tt);
     }
 
     static_assert(!std::is_copy_constructible_v<Tuple<int&, NeitherDefaultNorCopyConstructible>>);
