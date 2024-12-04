@@ -212,7 +212,16 @@ public:
     int x = 0;
 };
 
+struct NotCopyable {
+  NotCopyable() = default;
+  NotCopyable(const NotCopyable&) = delete;
+};
+
 void test6() {
+    {
+      Deque<NotCopyable> deq(10);
+    }
+
     Deque<NotDefaultConstructible> d;
     
     NotDefaultConstructible ndc = VerySpecialType(-1);

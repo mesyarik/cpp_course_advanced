@@ -36,6 +36,22 @@ struct Derived: public Base {};
 
 
 void test_shared_ptr() {
+    {
+      auto empty = SharedPtr<Derived>();
+      SharedPtr<Base> ptr = empty;
+      auto empty2 = SharedPtr<int>();
+      auto ptr2 = empty2;
+      std::ignore = ptr2;
+    }
+
+    {
+      auto ptr = makeShared<int>(1);
+      auto ptr2 = std::move(ptr);
+      // test nullptr checking presence 
+      assert(ptr.use_count() == 0);
+      auto wptr = WeakPtr<int>(ptr);
+      assert(wptr.expired());
+    }
 
     using std::vector;
 
