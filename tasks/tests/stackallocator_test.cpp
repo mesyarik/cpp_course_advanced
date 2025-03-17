@@ -300,7 +300,7 @@ void TestAlignment() {
 
     assert((void*)pchar != (void*)pint);
     
-    assert(reinterpret_cast<uintptr_t>(pint) % sizeof(int) == 0);
+    assert(reinterpret_cast<uintptr_t>(pint) % alignof(int) == 0);
 
     charalloc.deallocate(pchar, 3);
 
@@ -312,7 +312,7 @@ void TestAlignment() {
 
     auto* pld = ldalloc.allocate(25);
 
-    assert(reinterpret_cast<uintptr_t>(pld) % sizeof(long double) == 0);
+    assert(reinterpret_cast<uintptr_t>(pld) % alignof(long double) == 0);
 
     charalloc.deallocate(pchar, 555);
     ldalloc.deallocate(pld, 25);
