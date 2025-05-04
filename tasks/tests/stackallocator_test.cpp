@@ -39,7 +39,7 @@ void BasicListTest(Alloc alloc = Alloc()) {
 
     std::reverse(lst.begin(), lst.end());
     // now lst is 5 4 3 2 1
-    
+
     assert(lst.size() == 5);
 
     std::string s;
@@ -51,7 +51,7 @@ void BasicListTest(Alloc alloc = Alloc()) {
 
     auto cit = lst.cbegin();
     std::advance(cit, 3);
-    
+
     lst.insert(cit, 6);
     lst.insert(cit, 7);
 
@@ -59,7 +59,7 @@ void BasicListTest(Alloc alloc = Alloc()) {
     lst.insert(cit, 8);
     lst.insert(cit, 9);
     // now lst is 5 4 8 9 3 6 7 2 1
-    
+
     assert(lst.size() == 9);
 
     s.clear();
@@ -86,7 +86,7 @@ void BasicListTest(Alloc alloc = Alloc()) {
     }
     assert(s == "89672");
     //std::cerr << " check 1.3 ok, list contains 8 9 6 7 2" << std::endl;
-    
+
     auto rit = lst.rbegin();
     ++rit;
     lst.erase(rit.base());
@@ -101,7 +101,7 @@ void BasicListTest(Alloc alloc = Alloc()) {
         s += std::to_string(x);
     }
     assert(s == "8963");
-    
+
     assert(copy.size() == 5);
 
     s.clear();
@@ -181,10 +181,56 @@ void TestNotDefaultConstructible(Alloc alloc = Alloc()) {
     assert(lst.size() == 0);
 }
 
+struct AllocCounterContainer {
+    static size_t alloc_calls;
+    static size_t dealloc_calls;
+};
+
+template <typename T>
+struct AllocatorCounterWrap {
+
+    using value_type = T;
+
+    template <typename U>
+    AllocatorCounterWrap(const AllocatorCounterWrap<U>& alloc) {};
+    AllocatorCounterWrap() = default;
+
+    void reset() {
+        AllocCounterContainer::alloc_calls = 0;
+        AllocCounterContainer::dealloc_calls = 0;
+    }
+
+    T* allocate(size_t n) {
+        ++AllocCounterContainer::alloc_calls;
+        return std::allocator<T>().allocate(n);
+    }
+
+    void deallocate(T* ptr, size_t n) {
+        ++AllocCounterContainer::dealloc_calls;
+        std::allocator<T>().deallocate(ptr, n);
+    }
+};
+
+size_t AllocCounterContainer::alloc_calls = 0;
+size_t AllocCounterContainer::dealloc_calls = 0;
+
+template<typename T = int>
+void TestNoAllocationsOnEmptyList() {
+
+    using AllocCounter = AllocatorCounterWrap<T>;
+
+    AllocCounter alloc_counter;
+
+    List<T, AllocCounter> lst(alloc_counter);
+
+    assert(AllocCounterContainer::alloc_calls == 0 && "List shouldn't allocate anything in default constructor (empty list)");
+    assert(AllocCounterContainer::dealloc_calls == 0 && "and deallocate too");
+}
+
 template<typename Alloc = std::allocator<Accountant>>
 void TestAccountant(Alloc alloc = Alloc()) {
     Accountant::reset();
-    
+
     {
         List<Accountant, Alloc> lst(5, alloc);
         assert(lst.size() == 5);
@@ -205,9 +251,9 @@ void TestAccountant(Alloc alloc = Alloc()) {
 
         assert(Accountant::ctor_calls == 13);
         assert(Accountant::dtor_calls == 7);
-    
+
     } // dtor_calls += 6
-    
+
     assert(Accountant::ctor_calls == 13);
     assert(Accountant::dtor_calls == 13);
 }
@@ -254,7 +300,7 @@ void TestExceptionSafety() {
 
     ThrowingAccountant::need_throw = false;
     List<ThrowingAccountant> lst(8);
- 
+
     List<ThrowingAccountant> lst2;
     for (int i = 0; i < 13; ++i) {
         lst2.push_back(i);
@@ -262,12 +308,12 @@ void TestExceptionSafety() {
 
     Accountant::reset();
     ThrowingAccountant::need_throw = true;
-    
+
     try {
         auto lst3 = lst2;
     } catch (...) {
         assert(Accountant::ctor_calls == 4);
-        assert(Accountant::dtor_calls == 4);         
+        assert(Accountant::dtor_calls == 4);
     }
 
     Accountant::reset();
@@ -276,9 +322,9 @@ void TestExceptionSafety() {
         lst = lst2;
     } catch (...) {
         assert(Accountant::ctor_calls == 4);
-        assert(Accountant::dtor_calls == 4);         
-        
-        // Actually it may not be 8 (although de facto it is), but the only thing we can demand here 
+        assert(Accountant::dtor_calls == 4);
+
+        // Actually it may not be 8 (although de facto it is), but the only thing we can demand here
         // is the abscence of memory leaks
         //
         //assert(lst.size() == 8);
@@ -295,11 +341,11 @@ void TestAlignment() {
     StackAllocator<int, 200'000> intalloc(charalloc);
 
     auto* pchar = charalloc.allocate(3);
-    
+
     auto* pint = intalloc.allocate(1);
 
     assert((void*)pchar != (void*)pint);
-    
+
     assert(reinterpret_cast<uintptr_t>(pint) % sizeof(int) == 0);
 
     charalloc.deallocate(pchar, 3);
@@ -324,13 +370,13 @@ struct WhimsicalAllocator : public std::allocator<T> {
     std::shared_ptr<int> number;
 
     auto select_on_container_copy_construction() const {
-        return PropagateOnConstruct 
-            ? WhimsicalAllocator<T, PropagateOnConstruct, PropagateOnAssign>() 
+        return PropagateOnConstruct
+            ? WhimsicalAllocator<T, PropagateOnConstruct, PropagateOnAssign>()
             : *this;
     }
 
     struct propagate_on_container_copy_assignment
-        : std::conditional_t<PropagateOnAssign, std::true_type, std::false_type> 
+        : std::conditional_t<PropagateOnAssign, std::true_type, std::false_type>
     {};
 
     template <typename U>
@@ -352,10 +398,10 @@ struct WhimsicalAllocator : public std::allocator<T> {
         number = another.number;
         return *this;
     }
-    
+
     template <typename U>
     bool operator==(const WhimsicalAllocator<U, PropagateOnConstruct, PropagateOnAssign>& another) const {
-        return std::is_same_v<decltype(*this), decltype(another)> 
+        return std::is_same_v<decltype(*this), decltype(another)>
             && *number == *another.number;
     }
 
@@ -412,11 +458,11 @@ void TestWhimsicalAllocator() {
 template <class List>
 int ListPerformanceTest(List&& l) {
     using namespace std::chrono;
-    
+
     std::ostringstream oss;
 
     auto start = high_resolution_clock::now();
-    
+
     for (int i = 0; i < 1'000'000; ++i) {
         l.push_back(i);
     }
@@ -440,7 +486,7 @@ int ListPerformanceTest(List&& l) {
         if (i % 342'985 == 0) oss << *l.rbegin();
     }
     oss << *l.rbegin();
-    
+
     for (int i = 0; i < 1'000'000; ++i) {
         l.erase(it2++);
         if (i % 432'098 == 0) oss << *it2;
@@ -479,14 +525,14 @@ void DequeTest() {
     for (int i = 0; i < 2'000'000; ++i) {
         d.push_back(i % 100);
     }
-    
+
     assert(d.size() == 4'499'999);
     assert(d[4'000'000] == 1);
 
     for (int i = 0; i < 4'000'000; ++i) {
         d.pop_front();
     }
-    
+
     assert(d[400'000] == 1);
 }
 
@@ -496,14 +542,14 @@ void TestPerformance() {
 
     std::ostringstream oss_first;
     std::ostringstream oss_second;
-    
+
     int first = 0;
     int second = 0;
 
     {
         StackStorage<STORAGE_SIZE> storage;
         StackAllocator<int, STORAGE_SIZE> alloc(storage);
-        
+
         first = ListPerformanceTest(Container<int, std::allocator<int>>());
         second = ListPerformanceTest(Container<int, StackAllocator<int, STORAGE_SIZE>>(alloc));
         std::ignore = first;
@@ -513,7 +559,7 @@ void TestPerformance() {
 
     double mean_first = 0.0;
     double mean_second = 0.0;
- 
+
     for (int i = 0; i < 3; ++i) {
         first = ListPerformanceTest(Container<int, std::allocator<int>>());
         mean_first += first;
@@ -530,9 +576,9 @@ void TestPerformance() {
     mean_first /= 5;
     mean_second /= 5;
 
-    std::cerr << " Results with std::allocator: " << oss_first.str() 
+    std::cerr << " Results with std::allocator: " << oss_first.str()
             << " ms, results with StackAllocator: " << oss_second.str() << " ms " << std::endl;
-    
+
     if (mean_first * 0.9 < mean_second) {
         throw std::runtime_error("StackAllocator expected to be at least 10\% faster than std::allocator, but mean time were "
                 + std::to_string(mean_second) + " ms comparing with " + std::to_string(mean_first) + " :((( ...\n");
@@ -552,7 +598,7 @@ int main() {
         std::cerr << "Failed to get current stack size\n";
         abort();
     }
-    
+
     std::cerr << rl.rlim_cur << '\n';
 
     if (rl.rlim_cur < kStackSize) {
@@ -584,10 +630,14 @@ int main() {
 
     std::cerr << "Test 1 with StackAllocator passed." << std::endl;
 
+    TestNoAllocationsOnEmptyList<>();
+
+    std::cerr << "Test 1.1 with empty list and allocations counter passed." << std::endl;
+
     TestAccountant<>();
-    
+
     std::cerr << "Test 2 (counting) with std::allocator passed. Now will repeat with StackAllocator" << std::endl;
-    
+
     {
         StackStorage<200'000> storage;
         StackAllocator<int, 200'000> alloc(storage);
@@ -600,13 +650,13 @@ int main() {
     TestExceptionSafety();
 
     std::cerr << "Test 3 (ExceptionSafety) passed." << std::endl;
-    
+
     TestAlignment();
-    
+
     std::cerr << "Test 4 (Alignment) passed." << std::endl;
 
     TestNotDefaultConstructible<>();
-    
+
     {
         StackStorage<200'000> storage;
         StackAllocator<int, 200'000> alloc(storage);
@@ -619,11 +669,11 @@ int main() {
     DequeTest<StackAllocator<char, STORAGE_SIZE>>();
 
     std::cerr << "Test 6 (Deque with StackAllocator) passed." << std::endl;
-    
+
     TestWhimsicalAllocator();
-    
+
     std::cerr << "Test 7 (Allocator Awareness) passed." << std::endl;
-    
+
     std::cerr << "Starting performance test. First, let's test performance of different allocators with std::list." << std::endl;
 
     TestPerformance<std::list>();
